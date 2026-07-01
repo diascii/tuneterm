@@ -78,10 +78,10 @@ class LyricsPanel(Static):
                 break
                 
         viewport_height = 11
-        half = viewport_height // 2
+        offset = 2  # active line positioned at row 3 (0-indexed: 2)
         
         center_idx = active_idx if active_idx != -1 else 0
-        start_idx = max(0, center_idx - half)
+        start_idx = max(0, center_idx - offset)
         end_idx = min(len(self.lyrics_lines), start_idx + viewport_height)
         
         if end_idx - start_idx < viewport_height:
