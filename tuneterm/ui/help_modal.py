@@ -7,6 +7,9 @@ HELP_TEXT = """
 - `Space`: Play / Pause
 - `n`: Next track
 - `p`: Previous track
+- `Tab`: Focus file browser / queue
+- `h` or `Space` (on folder): Toggle folder expand/collapse
+- `l` or `Enter` (on file): Play selected file
 - `Right`: Seek +10s
 - `Left`: Seek -10s
 - `s`: Toggle Shuffle
