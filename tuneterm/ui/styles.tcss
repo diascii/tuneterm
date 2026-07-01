@@ -10,6 +10,16 @@
     layout: vertical;
 }
 
+/* Hide browser mode */
+.hide-browser #left-panel {
+    display: none;
+    border-right: none;
+}
+
+.hide-browser #right-panel {
+    width: 100%;
+}
+
 #now-playing {
     height: auto;
     border-bottom: solid $primary;

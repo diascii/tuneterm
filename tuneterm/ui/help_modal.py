@@ -15,6 +15,7 @@ HELP_TEXT = """
 - `s`: Toggle Shuffle
 - `r`: Toggle Repeat
 - `t`: Cycle Theme
+- `b`: Toggle browser panel
 - `u`: Add URL
 - `o`: Open Folder
 - `/`: Open Search

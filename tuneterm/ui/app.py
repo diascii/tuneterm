@@ -50,6 +50,7 @@ class TuneTermApp(App):
         ("/", "search", "Search"),
         ("e", "equalizer", "Equalizer"),
         ("t", "cycle_theme", "Theme"),
+        ("b", "toggle_browser", "Toggle Browser"),
         ("?", "help", "Help"),
     ]
 
@@ -478,6 +479,13 @@ class TuneTermApp(App):
     def action_equalizer(self):
         from tuneterm.ui.equalizer_panel import EqualizerPanel
         self.push_screen(EqualizerPanel())
+
+    def action_toggle_browser(self):
+        """Toggle file browser panel visibility."""
+        self.toggle_class("hide-browser")
+        self.notify(
+            "Browser: [bold]Hidden[/]" if self.has_class("hide-browser") else "Browser: [bold]Visible[/]"
+        )
 
     def action_cycle_theme(self):
         """Cycle to next Textual built-in theme."""
