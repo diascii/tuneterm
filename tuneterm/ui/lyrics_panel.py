@@ -2,7 +2,6 @@ import logging
 import os
 import re
 from textual.widgets import Static
-from tuneterm.integrations.lyrics_fetch import fetch_lyrics_from_web
 
 _log = logging.getLogger("tuneterm")
 
@@ -31,56 +30,39 @@ class LyricsPanel(Static):
         lines.sort(key=lambda x: x[0])
         return lines
 
-    def update_lyrics(self, track_path: str, artist: str = "", title: str = ""):
+    def try_load_local_lrc(self, track_path: str) -> bool:
+        """Load local .lrc file if exists. Returns True if loaded."""
         lrc_path = os.path.splitext(track_path)[0] + ".lrc"
-        if os.path.exists(lrc_path):
-            try:
-                with open(lrc_path, "r", encoding="utf-8") as f:
-                    content = f.read()
-                self.lyrics_lines = self.parse_lrc(content)
-                if not self.lyrics_lines:
-                    self.update("Lyrics format error.")
-                else:
-                    self.update_position(0.0)
-            except Exception as e:
-                _log.warning("[LyricsPanel] Gagal load LRC file %s: %s", lrc_path, e)
-                self.lyrics_lines = []
-                self.update("Lyrics format error.")
-        elif artist and title:
-            # No local .lrc file — try fetching from web
-            self._fetch_and_display_web_lyrics(artist, title)
-        else:
+        if not os.path.exists(lrc_path):
+            return False
+        try:
+            with open(lrc_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            self.lyrics_lines = self.parse_lrc(content)
+            if self.lyrics_lines:
+                self.update_position(0.0)
+                return True
+            self.update("Lyrics format error.")
+        except Exception as e:
+            _log.warning("[LyricsPanel] Gagal load LRC %s: %s", lrc_path, e)
+            self.lyrics_lines = []
+            self.update("Lyrics format error.")
+        return True  # file exists, attempted load
+
+    def display_web_lyrics(self, content: str):
+        """Display fetched web lyrics (called from main thread)."""
+        if not content:
             self.lyrics_lines = []
             self.update("No lyrics found.")
-
-    def _fetch_and_display_web_lyrics(self, artist: str, title: str):
-        """Fetch lyrics from LRCLIB and display them."""
-        try:
-            content = fetch_lyrics_from_web(artist, title)
-            if not content:
-                self.lyrics_lines = []
-                self.update("No lyrics found.")
-                return
-
-            # Check if content is LRC-synced (has timestamps) or plain text
-            if re.search(r'\[\d+:\d+(?:\.\d+)?\]', content):
-                self.lyrics_lines = self.parse_lrc(content)
-                if self.lyrics_lines:
-                    self.update_position(0.0)
-                else:
-                    self.lyrics_lines = []
-                    self.update("Lyrics format error.")
-            else:
-                # Plain text — create synthetic timestamps (one line per second)
-                plain_lines = [l.strip() for l in content.splitlines() if l.strip()]
-                if plain_lines:
-                    self.lyrics_lines = [(float(i), line) for i, line in enumerate(plain_lines)]
-                    self.update_position(0.0)
-                else:
-                    self.lyrics_lines = []
-                    self.update("No lyrics found.")
-        except Exception as e:
-            _log.warning("[LyricsPanel] Gagal fetch web lyrics: %s", e)
+            return
+        if re.search(r'\[\d+:\d+(?:\.\d+)?\]', content):
+            self.lyrics_lines = self.parse_lrc(content)
+        else:
+            plain = [l.strip() for l in content.splitlines() if l.strip()]
+            self.lyrics_lines = [(float(i), l) for i, l in enumerate(plain)]
+        if self.lyrics_lines:
+            self.update_position(0.0)
+        else:
             self.lyrics_lines = []
             self.update("No lyrics found.")
 

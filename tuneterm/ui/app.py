@@ -374,13 +374,14 @@ class TuneTermApp(App):
             else:
                 _set_terminal_title(self._title_text)
             
-            # Update lyrics
+            # Lyrics: try local .lrc first (instant), else bg fetch from web
             try:
                 lyrics_panel = self.query_one("#lyrics-panel")
-                lyrics_panel.update_lyrics(track.filepath, track.artist, track.title)
-            except Exception as e:
-                _log.warning("[App] Gagal update lyrics: %s", e)
-                
+                if not lyrics_panel.try_load_local_lrc(track.filepath):
+                    lyrics_panel.update("Loading lyrics...")
+                    self.run_worker(self._bg_fetch_lyrics, thread=True)
+            except Exception:
+                pass
             self.run_worker(self._bg_load_cover_art, thread=True)
 
     def reset_now_playing(self):
@@ -411,6 +412,22 @@ class TuneTermApp(App):
                 np.update_track(track.title, track.artist, track.album, cover_art_bytes)
                 
         self.call_from_thread(apply_art)
+
+    @work(thread=True)
+    def _bg_fetch_lyrics(self):
+        """Fetch lyrics in background thread — jangan block main thread."""
+        track = self.playlist.current()
+        if not track or not track.artist or not track.title:
+            return
+        from tuneterm.integrations.lyrics_fetch import fetch_lyrics_from_web
+        content = fetch_lyrics_from_web(track.artist, track.title)
+        def update_panel():
+            try:
+                lp = self.query_one("#lyrics-panel")
+                lp.display_web_lyrics(content)
+            except Exception as e:
+                _log.warning("[App] Gagal update panel lirik: %s", e)
+        self.call_from_thread(update_panel)
 
     def action_play_pause(self):
         self.engine.toggle_pause()

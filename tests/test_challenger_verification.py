@@ -121,7 +121,7 @@ def test_lyrics_panel_edge_cases():
     
     # Empty LRC contents
     assert panel.parse_lrc("") == []
-    panel.update_lyrics("nonexistent_path.mp3")
+    panel.try_load_local_lrc("nonexistent_path.mp3")
     assert panel.lyrics_lines == []
     assert panel.lyrics_lines == []  # No lyrics loaded
     
