@@ -34,8 +34,7 @@
 }
 
 #now-playing-row {
-    height: auto;
-    max-height: 12;
+    height: 14;
     border-bottom: solid $primary;
 }
 
