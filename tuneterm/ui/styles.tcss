@@ -1,0 +1,180 @@
+#left-panel {
+    width: 30%;
+    height: 100%;
+    border-right: solid $primary;
+}
+
+#right-panel {
+    width: 70%;
+    height: 100%;
+    layout: vertical;
+}
+
+#now-playing {
+    height: auto;
+    border-bottom: solid $primary;
+}
+
+#track-list {
+    height: 1fr;
+    background: transparent;
+}
+
+#tabs {
+    height: 1fr;
+}
+
+#playback-controls {
+    height: 3;
+    dock: bottom;
+    border-top: solid $primary;
+}
+
+#first-run-container {
+    align: center middle;
+    width: 50;
+    height: 15;
+    border: solid $accent;
+    background: $surface;
+}
+
+#welcome-title {
+    content-align: center middle;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+#first-run-buttons {
+    align: right middle;
+    margin-top: 1;
+}
+
+.modal-container {
+    align: center middle;
+    width: 60;
+    height: 10;
+    border: solid $accent;
+    background: $surface;
+    padding: 1 2;
+}
+
+#now-playing-top {
+    height: auto;
+    margin-bottom: 1;
+}
+
+#spinning-art {
+    width: 26;
+}
+
+#track-info {
+    width: 100%;
+    height: 4;
+    margin-left: 0;
+    content-align: left middle;
+}
+
+#right-stack {
+    width: 100%;
+    height: 100%;
+}
+
+#search-container {
+    align: center middle;
+    width: 60;
+    height: 20;
+    border: solid $accent;
+    background: $surface;
+    padding: 1 2;
+}
+
+#search-input {
+    width: 100%;
+    margin-bottom: 1;
+}
+
+#search-results {
+    width: 100%;
+    height: 1fr;
+}
+
+#eq-container {
+    align: center middle;
+    width: 70;
+    height: 38;
+    border: solid $accent;
+    background: $surface;
+    padding: 1 2;
+}
+
+#eq-title {
+    content-align: center middle;
+    text-style: bold;
+    width: 100%;
+    margin-bottom: 1;
+}
+
+#eq-header {
+    height: 3;
+    align: center middle;
+    margin-bottom: 1;
+}
+
+#eq-header Label {
+    margin-right: 1;
+}
+
+#eq-preset-select {
+    width: 25;
+    margin-right: 2;
+}
+
+#eq-reset-btn {
+    width: 12;
+}
+
+.eq-slider-row {
+    height: 3;
+    align: left middle;
+}
+
+.eq-label {
+    width: 20;
+    content-align: left middle;
+}
+
+.eq-slider-row Slider {
+    width: 1fr;
+}
+
+#eq-footer {
+    content-align: center middle;
+    width: 100%;
+    margin-top: 1;
+    text-style: italic;
+}
+
+/* ================================
+   MODAL SCREENS — Center on screen
+   ================================ */
+HelpModal, AddUrlModal, SearchModal, EqualizerPanel, FirstRunScreen {
+    align: center middle;
+}
+
+/* Modal containers */
+#help-container {
+    align: center middle;
+    width: 50;
+    height: 22;
+    border: solid $accent;
+    background: $surface;
+    padding: 1 2;
+}
+
+#help-footer {
+    content-align: center middle;
+    width: 100%;
+    margin-top: 1;
+    text-style: italic;
+}
+

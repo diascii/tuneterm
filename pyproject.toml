@@ -1,0 +1,20 @@
+[project]
+name = "tuneterm"
+version = "1.0.0"
+description = "Professional terminal music player with spinning album art"
+requires-python = ">=3.11"
+dependencies = [
+    "textual>=0.90",
+    "python-vlc>=3.0",
+    "mutagen>=1.47",
+    "Pillow>=10.0",
+    "numpy>=1.24",
+    "click>=8.1",
+]
+
+[project.optional-dependencies]
+integrations = ["pylast>=5.0", "pypresence>=4.3"]
+dev = ["pytest>=7.0", "pyinstaller>=6.0"]
+
+[project.scripts]
+tuneterm = "tuneterm.cli:main"
