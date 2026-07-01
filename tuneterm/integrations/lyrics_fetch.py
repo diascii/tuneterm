@@ -12,7 +12,8 @@ def _fetch_lrclib(artist: str, title: str):
         resp = requests.get(
             "https://lrclib.net/api/get",
             params={"artist_name": artist, "track_name": title},
-            timeout=10,
+            timeout=15,
+            headers={"User-Agent": "TuneTerm/1.0"},
         )
         if resp.status_code == 200:
             data = resp.json()
