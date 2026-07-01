@@ -422,10 +422,11 @@ class TuneTermApp(App):
             return
         from tuneterm.integrations.lyrics_fetch import fetch_lyrics_from_web
         content = fetch_lyrics_from_web(track.artist, track.title)
+        duration = track.duration if hasattr(track, 'duration') else 0
         def update_panel():
             try:
                 lp = self.query_one("#lyrics-panel")
-                lp.display_web_lyrics(content)
+                lp.display_web_lyrics(content, duration)
             except Exception as e:
                 _log.warning("[App] Gagal update panel lirik: %s", e)
         self.call_from_thread(update_panel)

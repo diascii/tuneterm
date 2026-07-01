@@ -49,8 +49,9 @@ class LyricsPanel(Static):
             self.update("Lyrics format error.")
         return True  # file exists, attempted load
 
-    def display_web_lyrics(self, content: str):
-        """Display fetched web lyrics (called from main thread)."""
+    def display_web_lyrics(self, content: str, duration: float = 0):
+        """Display fetched web lyrics (called from main thread).
+        If plain text and duration > 0, spread lines evenly across song length."""
         if not content:
             self.lyrics_lines = []
             self.update("No lyrics found.")
@@ -59,7 +60,12 @@ class LyricsPanel(Static):
             self.lyrics_lines = self.parse_lrc(content)
         else:
             plain = [l.strip() for l in content.splitlines() if l.strip()]
-            self.lyrics_lines = [(float(i), l) for i, l in enumerate(plain)]
+            if plain and duration > 0:
+                # Spread lines evenly across song duration
+                gap = duration / len(plain)
+                self.lyrics_lines = [(gap * i, l) for i, l in enumerate(plain)]
+            else:
+                self.lyrics_lines = [(float(i), l) for i, l in enumerate(plain)]
         if self.lyrics_lines:
             self.update_position(0.0)
         else:
