@@ -79,12 +79,12 @@ class TuneTermApp(App):
             
             # Right panel
             with Vertical(id="right-panel"):
-                yield NowPlaying(id="now-playing")
+                with Horizontal(id="now-playing-row"):
+                    yield NowPlaying(id="now-playing")
+                    yield LyricsPanel(id="lyrics-panel")
                 with TabbedContent(id="tabs"):
                     with TabPane("Queue", id="queue-tab"):
                         yield TrackList(id="track-list")
-                    with TabPane("Lyrics", id="lyrics-tab"):
-                        yield LyricsPanel(id="lyrics-panel")
                  
         # Bottom controls
         yield PlaybackControls(id="playback-controls")

@@ -62,15 +62,13 @@ async def test_combo_active_visualizer_tab_switching():
         app.update_playback_status()
         assert vis.is_playing is True
         
-        # Switch tab to Lyrics panel
-        tabs = app.query_one("#tabs")
-        tabs.active = "lyrics-tab"
-        await pilot.pause()
-        
-        # Visualizer should remain active or sleep/resume appropriately without lockup
+        # Lyrics panel now always visible (side-by-side with NowPlaying)
+        lp = app.query_one("#lyrics-panel")
+        assert lp is not None
         assert vis.is_playing is True
         
-        # Switch tab back to Queue
+        # Switch to Queue tab
+        tabs = app.query_one("#tabs")
         tabs.active = "queue-tab"
         await pilot.pause()
         assert vis.is_playing is True

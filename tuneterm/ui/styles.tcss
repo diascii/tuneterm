@@ -21,7 +21,21 @@
 }
 
 #now-playing {
+    width: 50%;
+    height: 100%;
+    border-right: solid $primary;
+}
+
+#lyrics-panel {
+    width: 50%;
+    height: 100%;
+    padding: 0 1;
+    overflow-y: auto;
+}
+
+#now-playing-row {
     height: auto;
+    max-height: 12;
     border-bottom: solid $primary;
 }
 
