@@ -11,6 +11,7 @@ HELP_TEXT = """
 - `Left`: Seek -10s
 - `s`: Toggle Shuffle
 - `r`: Toggle Repeat
+- `t`: Cycle Theme
 - `u`: Add URL
 - `o`: Open Folder
 - `/`: Open Search

@@ -1,10 +1,12 @@
 from textual.app import App, ComposeResult
+from textual.theme import BUILTIN_THEMES
 from textual import work
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Header, Footer, TabbedContent, TabPane
 from tuneterm.ui.file_browser import FileBrowser
 from tuneterm.ui.track_list import TrackList
 from tuneterm.ui.now_playing import NowPlaying
+from tuneterm.ui.status_bar import StatusBar
 from tuneterm.ui.controls import PlaybackControls, format_time
 from tuneterm.ui.first_run import FirstRunScreen
 from tuneterm.player.engine import VLCAudioEngine
@@ -47,6 +49,7 @@ class TuneTermApp(App):
         ("o", "change_dir", "Open Folder"),
         ("/", "search", "Search"),
         ("e", "equalizer", "Equalizer"),
+        ("t", "cycle_theme", "Theme"),
         ("?", "help", "Help"),
     ]
 
@@ -63,6 +66,8 @@ class TuneTermApp(App):
         self._title_text = ""
         self._marquee_offset = 0
         self._marquee_max_w = 35  # typical tab width
+        self._theme_list = list(BUILTIN_THEMES.keys())
+        self._theme_idx = self._theme_list.index("nord") if "nord" in self._theme_list else 0
         
     def compose(self) -> ComposeResult:
         from tuneterm.ui.lyrics_panel import LyricsPanel
@@ -95,6 +100,15 @@ class TuneTermApp(App):
         self.set_interval(15.0, self._update_discord_rpc) # Update discord every 15s to respect rate limits
         self.set_interval(30.0, self._watchdog_check)     # Watchdog — heartbeat log tiap 30 detik
         self.set_interval(0.5, self._tick_marquee)        # Marquee — sliding title tiap 0.5 detik
+        
+        # Set default theme
+        initial_theme = self._theme_list[self._theme_idx]
+        self.theme = initial_theme
+        try:
+            sb = self.query_one(StatusBar)
+            sb.theme_name = initial_theme
+        except Exception:
+            pass
         
         if not self.music_dir:
             self.push_screen(FirstRunScreen())
@@ -179,6 +193,15 @@ class TuneTermApp(App):
             vis = self.query_one("Visualizer")
             if hasattr(vis, "is_playing"):
                 vis.is_playing = self.engine.is_playing()
+            
+            # Update status bar
+            try:
+                sb = self.query_one(StatusBar)
+                sb.track_count = len(self.playlist.tracks)
+                sb.shuffle = self.playlist.is_shuffled
+                sb.repeat = self.playlist.repeat_mode.name
+            except Exception:
+                pass
                 
             # Update lyrics
             try:
@@ -438,6 +461,20 @@ class TuneTermApp(App):
     def action_equalizer(self):
         from tuneterm.ui.equalizer_panel import EqualizerPanel
         self.push_screen(EqualizerPanel())
+
+    def action_cycle_theme(self):
+        """Cycle to next Textual built-in theme."""
+        self._theme_idx = (self._theme_idx + 1) % len(self._theme_list)
+        theme_name = self._theme_list[self._theme_idx]
+        self.theme = theme_name
+        self.notify(f"Theme: [bold]{theme_name}[/bold]")
+        # Update status bar
+        try:
+            sb = self.query_one(StatusBar)
+            sb.theme_name = theme_name
+        except Exception:
+            pass
+        _log.info("[Theme] Switched to %s", theme_name)
 
     def action_help(self):
         from tuneterm.ui.help_modal import HelpModal

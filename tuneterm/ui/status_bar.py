@@ -1,19 +1,24 @@
 from textual.widgets import Static
 from textual.reactive import reactive
-from tuneterm.utils.config import config
 
 class StatusBar(Static):
-    theme_name = reactive(config.theme)
+    theme_name = reactive("nord")
     track_count = reactive(0)
+    shuffle = reactive(False)
+    repeat = reactive("OFF")
     
-    def on_mount(self):
-        self.update_status()
-        
     def watch_theme_name(self, _):
         self.update_status()
         
     def watch_track_count(self, _):
         self.update_status()
         
+    def watch_shuffle(self, _):
+        self.update_status()
+        
+    def watch_repeat(self, _):
+        self.update_status()
+        
     def update_status(self):
-        self.update(f"Theme: {self.theme_name} | Tracks: {self.track_count} | Shuffle: {config.shuffle}")
+        shuf = "[green]ON[/]" if self.shuffle else "[grey]OFF[/]"
+        self.update(f"Theme: [bold]{self.theme_name}[/] | Tracks: {self.track_count} | Shuffle: {shuf} | Repeat: {self.repeat}")
