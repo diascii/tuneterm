@@ -24,7 +24,7 @@ class FileBrowser(DirectoryTree):
     def action_toggle_node(self) -> None:
         """Toggle expand/collapse on the currently highlighted node."""
         node = self.cursor_node
-        if node and node.is_expandable:
+        if node and node.allow_expand:
             node.toggle()
 
     def action_open_file(self) -> None:
