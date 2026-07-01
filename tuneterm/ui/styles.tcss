@@ -87,7 +87,7 @@
 }
 
 #spinning-art {
-    width: 26;
+    width: 15%;
 }
 
 #track-info {
