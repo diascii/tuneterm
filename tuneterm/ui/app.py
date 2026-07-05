@@ -388,7 +388,7 @@ class TuneTermApp(App):
                     self.scrobble_current_track()
                     next_track = self.playlist.next()
                     if next_track:
-                        self._play_next_with_fadein(next_track)
+                        self._do_fadein_play(next_track)
                     else:
                         self.reset_now_playing()
         except Exception as e:
