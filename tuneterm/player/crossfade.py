@@ -11,13 +11,16 @@ class Crossfader:
         self._abort_event = threading.Event()
         self._target_volume = None
 
-    def crossfade_out(self, on_done=None):
-        """Fade out current track volume. Calls on_done when complete."""
+    def cancel(self):
+        """Immediately abort any running fade threads."""
         self._abort_event.set()
         if self._fade_thread and self._fade_thread.is_alive():
             self._fade_thread.join(timeout=0.5)
-
         self._abort_event.clear()
+
+    def crossfade_out(self, on_done=None):
+        """Fade out current track volume. Calls on_done when complete."""
+        self.cancel()
         
         if self._target_volume is None:
             self._target_volume = self.engine.get_volume()
@@ -35,17 +38,20 @@ class Crossfader:
 
     def crossfade_in(self):
         """Fade in the new track volume."""
-        self._abort_event.set()
-        if self._fade_thread and self._fade_thread.is_alive():
-            self._fade_thread.join(timeout=0.5)
-
-        self._abort_event.clear()
+        self.cancel()
         
         target = self._target_volume if self._target_volume is not None else self.engine.get_volume()
         self._target_volume = None # reset
         
         def _fade():
             try:
+                # Wait for VLC to fully initialize the audio output sink
+                import time
+                while not self.engine.is_playing():
+                    if self._abort_event.is_set():
+                        return
+                    time.sleep(0.01)
+
                 with self.engine.lock:
                     self.engine.player.audio_set_volume(0)
                     self.engine.mute(False)

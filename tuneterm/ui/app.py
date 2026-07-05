@@ -290,8 +290,11 @@ class TuneTermApp(App):
         self.scrobble_current_track()
         track = self.playlist.next()
         if track:
-            # Crossfade: fade out current → play next → fade in
-            self.crossfader.crossfade_out(on_done=lambda: self._play_next_with_fadein(track))
+            self.engine.mute(True)
+            self.engine.play(track.filepath)
+            self.crossfader.crossfade_in()
+            self.update_now_playing()
+            self.bg_update_now_playing(track.artist, track.title)
         else:
             self.reset_now_playing()
 
@@ -301,6 +304,7 @@ class TuneTermApp(App):
 
     def _do_fadein_play(self, track):
         """Actually play and fade in (called on main thread)."""
+        self.crossfader.cancel()
         self.engine.mute(True)
         self.engine.play(track.filepath)
         self.crossfader.crossfade_in()
@@ -311,6 +315,7 @@ class TuneTermApp(App):
         self.scrobble_current_track()
         track = self.playlist.previous()
         if track:
+            self.crossfader.cancel()
             self.engine.mute(True)
             self.engine.play(track.filepath)
             self.crossfader.crossfade_in()
@@ -423,6 +428,7 @@ class TuneTermApp(App):
             self.scrobble_current_track()
             self.playlist.current_index = index
             track = self.playlist.tracks[index]
+            self.crossfader.cancel()
             self.engine.stop()  # Cleanup VLC state before playing new track
             self.engine.mute(True)
             self.engine.play(track.filepath)
