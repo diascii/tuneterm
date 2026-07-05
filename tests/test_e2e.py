@@ -250,8 +250,13 @@ def test_ui_now_playing_update():
                 return mock_display
             return mock_art
         mock_query.side_effect = side_effect
-        np_panel.update_track("Song Title", "Artist Name", "Album Name", b"dummy")
-        mock_display.update_info.assert_called_once_with("Song Title", "Artist Name", "Album Name")
+        from tuneterm.player.metadata import TrackInfo
+        dummy = TrackInfo(
+            filepath="", title="Song Title", artist="Artist Name", album="Album Name",
+            year="", genre="", duration=0.0, bitrate=0, sample_rate=0, format=""
+        )
+        np_panel.update_track(dummy, b"dummy")
+        mock_display.update_info.assert_called_once_with(dummy)
         mock_art.set_art.assert_called_once_with(b"dummy")
 
 

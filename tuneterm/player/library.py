@@ -10,22 +10,23 @@ from tuneterm.utils.config import CONFIG_DIR
 _log = logging.getLogger("tuneterm")
 
 DB_PATH = CONFIG_DIR / "library.db"
-os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+
 
 class Library:
     def __init__(self):
-        os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+        self._lock = threading.Lock()
         self._init_db()
 
     @contextlib.contextmanager
     def _db_conn(self):
         os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-        conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-        try:
-            conn.execute("PRAGMA journal_mode=WAL;")
-            yield conn
-        finally:
-            conn.close()
+        with self._lock:
+            conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=10.0)
+            try:
+                conn.execute("PRAGMA journal_mode=WAL;")
+                yield conn
+            finally:
+                conn.close()
 
     def _init_db(self):
         with self._db_conn() as conn:

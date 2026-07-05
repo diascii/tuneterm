@@ -3,14 +3,21 @@ import threading
 
 class VLCAudioEngine:
     def __init__(self):
-        # Initialize VLC instance
+        # Initialize VLC instance with larger caches to prevent micro-stutters
         # "--no-video" ensures we only deal with audio
-        self.instance = vlc.Instance("--no-video", "--quiet")
+        self.instance = vlc.Instance(
+            "--no-video",
+            "--quiet",
+            "--file-caching=3000",
+            "--network-caching=3000",
+            "--live-caching=3000"
+        )
         self.player = self.instance.media_player_new()
         self.lock = threading.RLock()
         
         # State tracking
         self._current_media = None
+        self._volume = 100
         
         # Instantiate Equalizer
         from tuneterm.player.equalizer import Equalizer
@@ -72,27 +79,33 @@ class VLCAudioEngine:
             vol = max(0, min(100, vol))
             with self.lock:
                 self.player.audio_set_volume(vol)
+                self._volume = vol
             time.sleep(duration / (steps + 1))
         # Ensure final volume is set
         with self.lock:
             self.player.audio_set_volume(to_v)
+            self._volume = to_v
 
     @property
     def volume(self) -> int:
-        return self.player.audio_get_volume()
+        return self._volume
 
     @volume.setter
     def volume(self, val: int):
         with self.lock:
-            self.player.audio_set_volume(max(0, min(100, val)))
+            val = max(0, min(100, val))
+            self.player.audio_set_volume(val)
+            self._volume = val
 
     def set_volume(self, volume: int):
         with self.lock:
             # VLC volume is 0-100 (can go up to 200/400 but we keep 100 max)
-            self.player.audio_set_volume(max(0, min(100, volume)))
+            val = max(0, min(100, volume))
+            self.player.audio_set_volume(val)
+            self._volume = val
 
     def get_volume(self) -> int:
-        return self.player.audio_get_volume()
+        return self._volume
 
     def get_position(self) -> float:
         # returns position in seconds, or -1 if no media

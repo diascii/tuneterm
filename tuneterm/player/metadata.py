@@ -91,3 +91,24 @@ def extract_cover_art(filepath: str) -> Optional[bytes]:
         _log.debug("[Metadata] Gagal extract cover art untuk %s: %s", filepath, e)
         
     return None
+
+import functools
+import urllib.request
+import urllib.parse
+import json
+
+@functools.lru_cache(maxsize=128)
+def fetch_itunes_artwork(artist: str, title: str) -> Optional[str]:
+    """Fetch and cache high-res album art from iTunes Search API."""
+    try:
+        query = urllib.parse.quote(f"{artist} {title}")
+        url = f"https://itunes.apple.com/search?term={query}&entity=song&limit=1"
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        resp = urllib.request.urlopen(req, timeout=3).read()
+        data = json.loads(resp)
+        if data['results']:
+            # Get 512x512 image instead of 100x100
+            return data['results'][0]['artworkUrl100'].replace('100x100bb', '512x512bb')
+    except Exception as e:
+        _log.warning("[Metadata] Gagal fetch iTunes art: %s", e)
+    return None

@@ -9,8 +9,31 @@ _log = logging.getLogger("tuneterm")
 
 
 class TrackInfoDisplay(Static):
-    def update_info(self, title, artist, album):
-        self.update(f"[b]{title}[/b]\n{artist}\n{album}")
+    def update_info(self, track):
+        if not track:
+            return
+            
+        lines = [
+            f"[b]{track.title}[/b]",
+            f"{track.artist}",
+            f"[grey70]{track.album}[/grey70]"
+        ]
+        
+        # Build metadata row
+        meta = []
+        if getattr(track, 'year', None):
+            meta.append(track.year)
+        if getattr(track, 'format', None):
+            meta.append(track.format)
+        if getattr(track, 'bitrate', 0):
+            meta.append(f"{track.bitrate}kbps")
+        if getattr(track, 'sample_rate', 0):
+            meta.append(f"{track.sample_rate/1000:g}kHz")
+            
+        if meta:
+            lines.append(f"[dim cyan]{' · '.join(meta)}[/dim cyan]")
+            
+        self.update("\n".join(lines))
 
 class NowPlaying(Vertical):
     def compose(self):
@@ -20,9 +43,9 @@ class NowPlaying(Vertical):
                 yield TrackInfoDisplay(id="track-info")
                 yield Visualizer(id="visualizer")
 
-    def update_track(self, title, artist, album, cover_art_bytes):
+    def update_track(self, track, cover_art_bytes):
         try:
-            self.query_one(TrackInfoDisplay).update_info(title, artist, album)
+            self.query_one(TrackInfoDisplay).update_info(track)
         except Exception as e:
             _log.warning("[NowPlaying] Gagal update info track: %s", e)
         art = self.query_one(SpinningArt)

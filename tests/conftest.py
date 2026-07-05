@@ -21,6 +21,11 @@ tuneterm.utils.config.CONFIG_FILE = temp_path / "config.toml"
 import tuneterm.player.library
 tuneterm.player.library.DB_PATH = temp_path / "library.db"
 
+# Redirect session file to temp dir — session.py captures CONFIG_DIR at import
+# time, so patching CONFIG_DIR alone doesn't isolate it.
+import tuneterm.utils.session
+tuneterm.utils.session.SESSION_FILE = temp_path / "session.json"
+
 # Reset/initialize config
 tuneterm.utils.config.config = tuneterm.utils.config.Config()
 tuneterm.utils.config.config.save = MagicMock()
@@ -212,19 +217,30 @@ def mock_extract_metadata(filepath):
 @pytest.fixture(autouse=True)
 def clean_sys_modules(monkeypatch):
     original_modules = sys.modules.copy()
-    
+
     sys.modules['vlc'] = vlc_module
     sys.modules['soundcard'] = soundcard_module
     sys.modules['pypresence'] = pypresence_module
     sys.modules['pylast'] = pylast_module
-    
+
     monkeypatch.setattr(subprocess, "run", mock_run)
     monkeypatch.setattr(urllib.request, "urlopen", mock_urlopen)
-    
+
     import tuneterm.player.metadata
     monkeypatch.setattr(tuneterm.player.metadata, "extract_metadata", mock_extract_metadata)
-    
+
+    # Wipe session file before each test so tests don't bleed into each other.
+    # All tests share the same temp_path; a prior test's _save_session() call
+    # would pollute subsequent tests via _restore_session() otherwise.
+    session_file = tuneterm.utils.session.SESSION_FILE
+    if session_file.exists():
+        session_file.unlink()
+
     yield
-    
+
+    # Also clear after the test so teardown saves don't affect the next test
+    if session_file.exists():
+        session_file.unlink()
+
     sys.modules.clear()
     sys.modules.update(original_modules)

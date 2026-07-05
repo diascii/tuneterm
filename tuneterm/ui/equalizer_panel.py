@@ -34,7 +34,7 @@ except ImportError:
         @value.setter
         def value(self, v: int) -> None:
             self._value = max(self._min, min(self._max, v))
-            self.update(f"{'█' * (self._value - self._min + 1)}")
+            self.update(f"{'█' * min(self._value - self._min + 1, 30)}")
 
 class EqualizerPanel(ModalScreen):
     BINDINGS = [("escape", "dismiss", "Dismiss")]

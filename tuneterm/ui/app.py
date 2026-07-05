@@ -13,6 +13,7 @@ from tuneterm.player.engine import VLCAudioEngine
 from tuneterm.player.crossfade import Crossfader
 from tuneterm.player.playlist import Playlist
 from tuneterm.utils.config import config
+from tuneterm.utils.session import save_session, load_session
 from tuneterm.player.library import Library
 import logging
 import sys
@@ -51,6 +52,8 @@ class TuneTermApp(App):
         ("e", "equalizer", "Equalizer"),
         ("t", "cycle_theme", "Theme"),
         ("b", "toggle_browser", "Toggle Browser"),
+        ("=", "volume_up", "Vol+"),
+        ("-", "volume_down", "Vol-"),
         ("?", "help", "Help"),
     ]
 
@@ -102,6 +105,12 @@ class TuneTermApp(App):
         self.set_interval(30.0, self._watchdog_check)     # Watchdog — heartbeat log tiap 30 detik
         self.set_interval(0.5, self._tick_marquee)        # Marquee — sliding title tiap 0.5 detik
         
+        # Restore saved volume
+        try:
+            self.engine.set_volume(config.volume)
+        except Exception:
+            pass
+
         # Set default theme
         initial_theme = self._theme_list[self._theme_idx]
         self.theme = initial_theme
@@ -115,9 +124,75 @@ class TuneTermApp(App):
             self.push_screen(FirstRunScreen())
         else:
             self.load_music_dir(self.music_dir)
-            
+            self._restore_session()
+
         if self.play_on_start:
             self.load_and_play_start_file()
+
+    def on_unmount(self) -> None:
+        """Save session when the app closes cleanly."""
+        self._save_session()
+
+    def _save_session(self):
+        try:
+            queue = [t.filepath for t in self.playlist.tracks]
+            pos   = self.engine.get_position()
+            idx   = self.playlist.current_index
+            current = self.playlist.tracks[idx].filepath if 0 <= idx < len(queue) else ""
+            save_session(current, pos, queue, music_dir=self.music_dir)
+            _log.info("[Session] Saved %d tracks, pos=%.1fs", len(queue), pos)
+        except Exception as e:
+            _log.warning("[Session] Gagal save session: %s", e)
+
+    def _restore_session(self):
+        """Re-populate queue and seek to saved position from last session."""
+        import os
+        try:
+            sess = load_session()
+            if not sess or not sess.get("queue"):
+                return
+            # Only restore if the session belongs to the same music directory
+            if sess.get("music_dir") != self.music_dir:
+                _log.info("[Session] music_dir mismatch — skip restore")
+                return
+            track_list = self.query_one(TrackList)
+            added = 0
+            for fp in sess["queue"]:
+                # Skip local files that no longer exist on disk
+                is_url = fp.startswith(("http://", "https://", "rtsp://"))
+                if not is_url and not os.path.isfile(fp):
+                    _log.debug("[Session] Skip missing file: %s", fp)
+                    continue
+                info = self.playlist.add(fp)
+                track_list.add_row(info.title, info.artist, info.album, format_time(info.duration))
+                added += 1
+            if added == 0:
+                return
+            # Restore current track index
+            saved_path = sess.get("current_track", "")
+            idx = next(
+                (i for i, t in enumerate(self.playlist.tracks) if t.filepath == saved_path),
+                0
+            )
+            if self.playlist.tracks:
+                self.playlist.current_index = idx
+                track = self.playlist.tracks[idx]
+                self.engine.play(track.filepath)
+                saved_pos = float(sess.get("position", 0))
+                if saved_pos > 1.0:   # skip trivial positions
+                    self.engine.seek_absolute(saved_pos)
+                self.engine.pause()   # start paused — user resumes with Space
+                self.update_now_playing()
+                if hasattr(track_list, "set_playing_row"):
+                    track_list.set_playing_row(idx)
+                self.notify(
+                    f"Session restored: [bold]{added} tracks[/bold] — press [bold]Space[/bold] to resume",
+                    timeout=4,
+                )
+            _log.info("[Session] Restored %d tracks, idx=%d, pos=%.1fs",
+                      added, idx, sess.get("position", 0))
+        except Exception as e:
+            _log.warning("[Session] Gagal restore session: %s", e)
 
     def _watchdog_check(self):
         """Heartbeat — cek kalo main thread masih responsif. Log timestamp."""
@@ -144,18 +219,9 @@ class TuneTermApp(App):
             if hasattr(track, 'thumb_url') and track.thumb_url:
                 large_image = track.thumb_url
             else:
-                try:
-                    import urllib.request, urllib.parse, json
-                    query = urllib.parse.quote(f"{track.artist} {track.title}")
-                    url = f"https://itunes.apple.com/search?term={query}&entity=song&limit=1"
-                    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-                    resp = urllib.request.urlopen(req, timeout=3).read()
-                    data = json.loads(resp)
-                    if data['results']:
-                        # Get 512x512 image instead of 100x100
-                        large_image = data['results'][0]['artworkUrl100'].replace('100x100bb', '512x512bb')
-                except Exception as e:
-                    _log.warning("[App] Gagal fetch iTunes art: %s", e)
+                from tuneterm.player.metadata import fetch_itunes_artwork
+                large_image = fetch_itunes_artwork(track.artist, track.title)
+                
             # Fallback public music icon if no album art found
             if not large_image:
                 large_image = "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f6/Music_1_-_The_Noun_Project.svg/512px-Music_1_-_The_Noun_Project.svg.png"
@@ -172,24 +238,22 @@ class TuneTermApp(App):
 
     @work(thread=True)
     def load_and_play_start_file(self):
-        with self.playlist._lock:
-            info = self.playlist.add(self.play_on_start)
-        self.call_from_thread(self._on_start_track_added, info)
+        self.add_track_from_source(self.play_on_start, play_immediately=True)
 
-    def _on_start_track_added(self, info):
-        track_list = self.query_one(TrackList)
-        track_list.add_row(info.title, info.artist, info.album, format_time(info.duration))
-        self.play_track(0)
-        
     def update_playback_status(self):
         try:
             controls = self.query_one(PlaybackControls)
             pos = self.engine.get_position()
-            controls.position = pos
-            controls.duration = self.engine.get_duration()
-            controls.is_playing = self.engine.is_playing()
-            controls.shuffle = self.playlist.is_shuffled
-            controls.repeat = self.playlist.repeat_mode.name
+            controls.position    = pos
+            controls.duration    = self.engine.get_duration()
+            controls.is_playing  = self.engine.is_playing()
+            controls.shuffle     = self.playlist.is_shuffled
+            controls.repeat      = self.playlist.repeat_mode.name
+            controls.volume      = self.engine.get_volume()
+            idx   = self.playlist.current_index
+            total = len(self.playlist.tracks)
+            controls.track_num   = (idx + 1) if total > 0 else 0
+            controls.track_total = total
             
             vis = self.query_one("Visualizer")
             if hasattr(vis, "is_playing"):
@@ -198,7 +262,7 @@ class TuneTermApp(App):
             # Update status bar
             try:
                 sb = self.query_one(StatusBar)
-                sb.track_count = len(self.playlist.tracks)
+                sb.track_count = total
                 sb.shuffle = self.playlist.is_shuffled
                 sb.repeat = self.playlist.repeat_mode.name
             except Exception:
@@ -253,10 +317,32 @@ class TuneTermApp(App):
 
     def action_seek_forward(self):
         self.engine.seek_relative(10)
-        
+
     def action_seek_backward(self):
         self.engine.seek_relative(-10)
-        
+
+    def action_volume_up(self):
+        vol = min(100, self.engine.get_volume() + 5)
+        self.engine.set_volume(vol)
+        config.volume = vol
+        config.save()
+        self.notify(f"Volume: [bold]{vol}%[/bold]", timeout=1)
+        try:
+            self.query_one(PlaybackControls).volume = vol
+        except Exception:
+            pass
+
+    def action_volume_down(self):
+        vol = max(0, self.engine.get_volume() - 5)
+        self.engine.set_volume(vol)
+        config.volume = vol
+        config.save()
+        self.notify(f"Volume: [bold]{vol}%[/bold]", timeout=1)
+        try:
+            self.query_one(PlaybackControls).volume = vol
+        except Exception:
+            pass
+
     def action_toggle_shuffle(self):
         self.playlist.toggle_shuffle()
         self.update_playback_status()
@@ -280,19 +366,7 @@ class TuneTermApp(App):
 
     @work(thread=True)
     def add_url_and_play(self, url: str):
-        with self.playlist._lock:
-            info = self.playlist.add(url)
-        self.call_from_thread(self._on_url_track_added, info)
-
-    def _on_url_track_added(self, info):
-        track_list = self.query_one(TrackList)
-        track_list.add_row(info.title, info.artist, info.album, format_time(info.duration))
-        try:
-            with self.playlist._lock:
-                added_idx = self.playlist._tracks.index(info)
-            self.play_track(added_idx)
-        except ValueError:
-            pass
+        self.add_track_from_source(url, play_immediately=True)
 
     def action_change_dir(self):
         from tuneterm.ui.first_run import FirstRunScreen
@@ -357,12 +431,13 @@ class TuneTermApp(App):
             self.update_now_playing()
             self.crossfader.crossfade_in()
             self.bg_update_now_playing(track.artist, track.title)
+            self._save_session()
 
     def update_now_playing(self):
         track = self.playlist.current()
         if track:
             np = self.query_one(NowPlaying)
-            np.update_track(track.title, track.artist, track.album, None)
+            np.update_track(track, None)
             np.set_playing(True)
             
             # Set terminal title to current track
@@ -388,7 +463,14 @@ class TuneTermApp(App):
     def reset_now_playing(self):
         """Reset UI when playback ends (no more tracks in queue)."""
         np = self.query_one(NowPlaying)
-        np.update_track("Playback finished", "", "", None)
+        
+        # Create a dummy TrackInfo for the reset state
+        from tuneterm.player.metadata import TrackInfo
+        dummy = TrackInfo(
+            filepath="", title="Playback finished", artist="", album="",
+            year="", genre="", duration=0.0, bitrate=0, sample_rate=0, format=""
+        )
+        np.update_track(dummy, None)
         np.set_playing(False)
         self._title_text = ""
         self._marquee_offset = 0
@@ -403,6 +485,8 @@ class TuneTermApp(App):
             return
         if hasattr(track, 'cover_art_bytes') and track.cover_art_bytes:
             cover_art_bytes = track.cover_art_bytes
+        elif track.format == "Stream" or track.filepath.startswith("http"):
+            cover_art_bytes = None
         else:
             cover_art_bytes = extract_cover_art(track.filepath)
             
@@ -410,7 +494,7 @@ class TuneTermApp(App):
             current_track = self.playlist.current()
             if current_track and current_track.filepath == track.filepath:
                 np = self.query_one(NowPlaying)
-                np.update_track(track.title, track.artist, track.album, cover_art_bytes)
+                np.update_track(track, cover_art_bytes)
                 
         self.call_from_thread(apply_art)
 
@@ -418,13 +502,17 @@ class TuneTermApp(App):
     def _bg_fetch_lyrics(self):
         """Fetch lyrics in background thread — jangan block main thread."""
         track = self.playlist.current()
-        if not track or not track.artist or not track.title:
+        if not track or not track.artist or not track.title or track.format == "Stream":
             return
         from tuneterm.integrations.lyrics_fetch import fetch_lyrics_from_web
         content = fetch_lyrics_from_web(track.artist, track.title)
         duration = track.duration if hasattr(track, 'duration') else 0
+        expected_filepath = track.filepath
         def update_panel():
             try:
+                current = self.playlist.current()
+                if not current or current.filepath != expected_filepath:
+                    return
                 lp = self.query_one("#lyrics-panel")
                 lp.display_web_lyrics(content, duration)
             except Exception as e:
@@ -441,13 +529,24 @@ class TuneTermApp(App):
 
     @work(thread=True)
     def handle_file_selection(self, filepath: str):
-        with self.playlist._lock:
-            info = self.playlist.add(filepath)
-        self.call_from_thread(self._on_file_track_added, info)
+        self.add_track_from_source(filepath, play_immediately=False)
 
-    def _on_file_track_added(self, info):
+    def add_track_from_source(self, source: str, play_immediately: bool = False):
+        """Helper to deduplicate adding a track from file/URL and optionally playing it."""
+        with self.playlist._lock:
+            info = self.playlist.add(source)
+        self.call_from_thread(self._on_track_added, info, play_immediately)
+
+    def _on_track_added(self, info, play_immediately: bool):
         track_list = self.query_one(TrackList)
         track_list.add_row(info.title, info.artist, info.album, format_time(info.duration))
+        if play_immediately:
+            try:
+                with self.playlist._lock:
+                    added_idx = self.playlist._tracks.index(info)
+                self.play_track(added_idx)
+            except ValueError:
+                pass
 
     def on_track_list_track_selected_message(self, event: TrackList.TrackSelectedMessage) -> None:
         self.play_track(event.index)

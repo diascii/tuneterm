@@ -60,16 +60,17 @@ class Visualizer(Static):
                         except concurrent.futures.TimeoutError:
                             # Ga ada audio data — skip frame ini
                             self.raw_mags = np.zeros(self.bands)
-                            time.sleep(0.05)
                             continue
                         except Exception:
                             self.raw_mags = np.zeros(self.bands)
-                            time.sleep(0.05)
+                            time.sleep(0.05) # Prevent tight spin-loop on hard error
                             continue
                         
                         if not self.is_playing or self.mode == "off":
                             self.raw_mags = np.zeros(self.bands)
-                            time.sleep(0.1)
+                            # Do NOT time.sleep here! mic.record is already blocking.
+                            # If we sleep, we don't drain the OS buffer fast enough 
+                            # and it will overflow, permanently breaking the recorder.
                             continue
                             
                         if len(data.shape) > 1:

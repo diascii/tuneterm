@@ -6,11 +6,13 @@ _log = logging.getLogger("tuneterm")
 
 SESSION_FILE = CONFIG_DIR / "session.json"
 
-def save_session(current_track_path: str, position: float, queue: list[str]):
+def save_session(current_track_path: str, position: float, queue: list[str],
+                  music_dir: str = ""):
     data = {
         "current_track": current_track_path,
         "position": position,
-        "queue": queue
+        "queue": queue,
+        "music_dir": music_dir,
     }
     with open(SESSION_FILE, "w") as f:
         json.dump(data, f)
