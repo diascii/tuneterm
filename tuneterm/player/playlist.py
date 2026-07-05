@@ -98,7 +98,7 @@ class Playlist:
                 album="YouTube",
                 year="",
                 genre="Stream",
-                duration=0.0,
+                duration=float(info_dict.get("duration", 0.0)),
                 bitrate=0,
                 sample_rate=0,
                 format="Stream",
