@@ -334,6 +334,16 @@ class TuneTermApp(App):
             track.duration = info.get('duration', 0)
             if not track.thumb_url and info.get('thumbnail'):
                 track.thumb_url = info.get('thumbnail')
+
+            if not track.cover_art_bytes and track.thumb_url:
+                import urllib.request
+                try:
+                    req = urllib.request.Request(track.thumb_url, headers={'User-Agent': 'Mozilla/5.0'})
+                    with urllib.request.urlopen(req, timeout=5) as resp:
+                        track.cover_art_bytes = resp.read()
+                except Exception as e:
+                    _log.debug("[Spotify] Gagal download thumbnail lazily: %s", e)
+
             track.is_unresolved = False
             track.is_resolving = False
             
@@ -812,10 +822,22 @@ class TuneTermApp(App):
                 unresolved_track.duration = info.get('duration', 0)
                 if not unresolved_track.thumb_url and info.get('thumbnail'):
                     unresolved_track.thumb_url = info.get('thumbnail')
+
+                if not unresolved_track.cover_art_bytes and unresolved_track.thumb_url:
+                    import urllib.request
+                    try:
+                        req = urllib.request.Request(unresolved_track.thumb_url, headers={'User-Agent': 'Mozilla/5.0'})
+                        with urllib.request.urlopen(req, timeout=5) as resp:
+                            unresolved_track.cover_art_bytes = resp.read()
+                    except Exception as e:
+                        _log.debug("[Spotify] Gagal download thumbnail lazily: %s", e)
+
                 unresolved_track.is_unresolved = False
                 unresolved_track.is_resolving = False
                 
                 self.call_from_thread(self._refresh_track_list, unresolved_idx)
+                if unresolved_idx == self.playlist.current_index:
+                    self.call_from_thread(self.update_now_playing)
             except Exception as e:
                 _log.error("[Spotify] Background resolver failed for %s: %s", unresolved_track.title, e)
                 # Mark as resolved anyway so we don't infinitely retry it, but it's empty
