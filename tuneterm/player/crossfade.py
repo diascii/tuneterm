@@ -46,6 +46,9 @@ class Crossfader:
         
         def _fade():
             try:
+                with self.engine.lock:
+                    self.engine.player.audio_set_volume(0)
+                    self.engine.mute(False)
                 self.engine.fade_volume(0, target, self.fade_duration, abort_event=self._abort_event)
             except Exception as e:
                 _log.warning("[Crossfader] Fade-in error: %s", e)

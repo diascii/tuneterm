@@ -113,6 +113,10 @@ class VLCAudioEngine:
             self.player.audio_set_volume(val)
             self._user_volume = val
 
+    def mute(self, state: bool):
+        with self.lock:
+            self.player.audio_set_mute(1 if state else 0)
+
     def get_volume(self) -> int:
         return self._user_volume
 
