@@ -346,7 +346,7 @@ class TuneTermApp(App):
 
     def action_prev_track(self):
         self.scrobble_current_track()
-        track = self.playlist.prev()
+        track = self.playlist.previous()
         if track:
             self.resolve_and_play(track)
         else:
