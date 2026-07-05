@@ -137,9 +137,18 @@ class TuneTermApp(App):
         """Save session when the app closes cleanly."""
         self._save_session()
 
+    def _get_savable_queue(self):
+        queue = []
+        for t in self.playlist.tracks:
+            if t.album == "Spotify" or getattr(t, 'is_unresolved', False):
+                queue.append(f"spotify_lazy:{t.title}::{t.artist}::{t.thumb_url or ''}")
+            else:
+                queue.append(t.original_url if t.original_url else t.filepath)
+        return queue
+
     def _save_session(self):
         try:
-            queue = [t.original_url if t.original_url else t.filepath for t in self.playlist.tracks]
+            queue = self._get_savable_queue()
             pos   = self.engine.get_position()
             idx   = self.playlist.current_index
             if 0 <= idx < len(self.playlist.tracks):
@@ -309,11 +318,12 @@ class TuneTermApp(App):
     def resolve_and_play(self, track):
         """Resolves Spotify track if needed, then plays it on the main thread."""
         if getattr(track, 'is_unresolved', False):
+            track.is_resolving = True
             self.run_worker(self._resolve_and_play_bg(track), thread=True)
         else:
             self._do_fadein_play(track)
 
-    async def _resolve_and_play_bg(self, track):
+    def _resolve_and_play_bg(self, track):
         self.call_from_thread(self.notify, f"Resolving {track.title}...", timeout=2)
         from tuneterm.player.streaming import get_youtube_stream_info
         try:
@@ -324,10 +334,12 @@ class TuneTermApp(App):
             if not track.thumb_url and info.get('thumbnail'):
                 track.thumb_url = info.get('thumbnail')
             track.is_unresolved = False
+            track.is_resolving = False
             
             # Update tracklist duration
             self.call_from_thread(self._refresh_track_list)
         except Exception as e:
+            track.is_resolving = False
             self.call_from_thread(self.notify, f"Failed to resolve {track.title}", severity="error")
             return
             
@@ -443,7 +455,7 @@ class TuneTermApp(App):
         else:
             self.add_track_from_source(url, play_immediately=True)
             
-    async def _process_spotify_import(self, tracks, choice):
+    def _process_spotify_import(self, tracks, choice):
         if choice == "replace":
             with self.playlist._lock:
                 self.playlist.clear()
@@ -708,7 +720,7 @@ class TuneTermApp(App):
 
     def save_current_queue(self, name: str):
         from tuneterm.player.playlists import save_playlist
-        tracks = [t.original_url if t.original_url else t.filepath for t in self.playlist.tracks]
+        tracks = self._get_savable_queue()
         save_playlist(name, tracks)
         self.notify(f"Saved playlist: [bold]{name}[/bold] ({len(tracks)} tracks)", timeout=3)
 
@@ -727,11 +739,21 @@ class TuneTermApp(App):
         # Load and append
         for fp in tracks:
             import os
-            is_url = fp.startswith(("http://", "https://", "rtsp://"))
-            if not is_url and not os.path.isfile(fp):
-                _log.debug("[Playlists] Skip missing file: %s", fp)
-                continue
-            info = self.playlist.add(fp)
+            if fp.startswith("spotify_lazy:"):
+                parts = fp[len("spotify_lazy:"):].split("::")
+                title = parts[0]
+                artist = parts[1] if len(parts) > 1 else ""
+                thumb = parts[2] if len(parts) > 2 else None
+                if thumb == "": thumb = None
+                info = self.playlist.add_lazy_spotify(title, artist, thumb)
+            else:
+                is_url = fp.startswith(("http://", "https://", "rtsp://"))
+                if not is_url and not os.path.isfile(fp):
+                    _log.debug("[Playlists] Skip missing file: %s", fp)
+                    continue
+                info = self.playlist.add(fp)
+                
+            from tuneterm.ui.controls import format_time
             track_list.add_row(info.title, info.artist, info.album, format_time(info.duration))
             
         self.notify(f"Loaded playlist with [bold]{len(self.playlist.tracks)} tracks[/bold].", timeout=3)
@@ -760,13 +782,14 @@ class TuneTermApp(App):
         import time
         from tuneterm.player.streaming import get_youtube_stream_info
         
-        while getattr(self, 'is_running', True):
+        while getattr(self, 'is_running', True) and not getattr(self, '_exit', False):
             # We must be careful not to hold the lock for the whole loop
             unresolved_track = None
             with self.playlist._lock:
                 for t in self.playlist.tracks:
-                    if getattr(t, 'is_unresolved', False):
+                    if getattr(t, 'is_unresolved', False) and not getattr(t, 'is_resolving', False):
                         unresolved_track = t
+                        t.is_resolving = True
                         break
                         
             if not unresolved_track:
@@ -781,12 +804,14 @@ class TuneTermApp(App):
                 if not unresolved_track.thumb_url and info.get('thumbnail'):
                     unresolved_track.thumb_url = info.get('thumbnail')
                 unresolved_track.is_unresolved = False
+                unresolved_track.is_resolving = False
                 
                 self.call_from_thread(self._refresh_track_list)
             except Exception as e:
                 _log.error("[Spotify] Background resolver failed for %s: %s", unresolved_track.title, e)
                 # Mark as resolved anyway so we don't infinitely retry it, but it's empty
                 unresolved_track.is_unresolved = False
+                unresolved_track.is_resolving = False
                 unresolved_track.filepath = ""
                 
             time.sleep(1.0) # sleep between requests to avoid rate limits

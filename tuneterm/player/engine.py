@@ -67,7 +67,7 @@ class VLCAudioEngine:
 
     def seek_absolute(self, seconds: float):
         with self.lock:
-            if not self.is_playing():
+            if not self._current_media:
                 return
             # set_time takes milliseconds
             # Need to ensure we don't seek past duration or before 0

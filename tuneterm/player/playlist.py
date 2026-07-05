@@ -72,45 +72,45 @@ class Playlist:
             self._repeat_mode = value
 
     def add(self, filepath: str) -> TrackInfo:
+        if filepath.startswith("http://") or filepath.startswith("https://"):
+            info_dict = get_youtube_stream_info(filepath)
+            raw_url = info_dict.get("url")
+            if not raw_url:
+                raw_url = filepath
+                
+            title = info_dict.get("title", "Streaming Audio")
+            artist = info_dict.get("artist", filepath)
+            
+            cover_bytes = None
+            thumb_url = info_dict.get("thumbnail")
+            if thumb_url:
+                try:
+                    req = urllib.request.Request(thumb_url, headers={'User-Agent': 'Mozilla/5.0'})
+                    with urllib.request.urlopen(req, timeout=5) as resp:
+                        cover_bytes = resp.read()
+                except Exception as e:
+                    _log.debug("[Playlist] Gagal download thumbnail: %s", e)
+                
+            info = TrackInfo(
+                filepath=raw_url,
+                title=title,
+                artist=artist,
+                album="YouTube",
+                year="",
+                genre="Stream",
+                duration=0.0,
+                bitrate=0,
+                sample_rate=0,
+                format="Stream",
+                cover_art_bytes=cover_bytes,
+                thumb_url=thumb_url,
+                original_url=filepath
+            )
+        else:
+            info = extract_metadata(filepath)
+            info.original_url = filepath
+            
         with self._lock:
-            if filepath.startswith("http://") or filepath.startswith("https://"):
-                info_dict = get_youtube_stream_info(filepath)
-                raw_url = info_dict.get("url")
-                if not raw_url:
-                    raw_url = filepath
-                    
-                title = info_dict.get("title", "Streaming Audio")
-                artist = info_dict.get("artist", filepath)
-                
-                cover_bytes = None
-                thumb_url = info_dict.get("thumbnail")
-                if thumb_url:
-                    try:
-                        req = urllib.request.Request(thumb_url, headers={'User-Agent': 'Mozilla/5.0'})
-                        with urllib.request.urlopen(req, timeout=5) as resp:
-                            cover_bytes = resp.read()
-                    except Exception as e:
-                        _log.debug("[Playlist] Gagal download thumbnail: %s", e)
-                    
-                info = TrackInfo(
-                    filepath=raw_url,
-                    title=title,
-                    artist=artist,
-                    album="YouTube",
-                    year="",
-                    genre="Stream",
-                    duration=0.0,
-                    bitrate=0,
-                    sample_rate=0,
-                    format="Stream",
-                    cover_art_bytes=cover_bytes,
-                    thumb_url=thumb_url,
-                    original_url=filepath
-                )
-            else:
-                info = extract_metadata(filepath)
-                info.original_url = filepath
-                
             self._tracks.append(info)
             if self._is_shuffled:
                 # Insert at a random position in the remaining queue, or just append

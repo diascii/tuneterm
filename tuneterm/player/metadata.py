@@ -22,6 +22,7 @@ class TrackInfo:
     thumb_url: Optional[str] = None
     original_url: Optional[str] = None
     is_unresolved: bool = False
+    is_resolving: bool = False
     search_query: Optional[str] = None
 
 def extract_metadata(filepath: str) -> TrackInfo:
