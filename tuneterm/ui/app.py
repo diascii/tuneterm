@@ -319,10 +319,11 @@ class TuneTermApp(App):
         """Resolves Spotify track if needed, then plays it on the main thread."""
         if getattr(track, 'is_unresolved', False):
             track.is_resolving = True
-            self.run_worker(self._resolve_and_play_bg(track), thread=True)
+            self._resolve_and_play_bg(track)
         else:
             self._do_fadein_play(track)
 
+    @work(thread=True)
     def _resolve_and_play_bg(self, track):
         self.call_from_thread(self.notify, f"Resolving {track.title}...", timeout=2)
         from tuneterm.player.streaming import get_youtube_stream_info
@@ -371,14 +372,19 @@ class TuneTermApp(App):
             track = self.playlist.tracks[index]
             self.resolve_and_play(track)
 
-    def _refresh_track_list(self):
+    def _refresh_track_list(self, updated_index=None):
         """Helper to redraw TrackList."""
         try:
             track_list = self.query_one(TrackList)
-            track_list.clear()
             from tuneterm.ui.controls import format_time
-            for info in self.playlist.tracks:
-                track_list.add_row(info.title, info.artist, info.album, format_time(info.duration))
+            if updated_index is not None and updated_index < track_list.row_count:
+                info = self.playlist.tracks[updated_index]
+                from textual.coordinate import Coordinate
+                track_list.update_cell_at(Coordinate(updated_index, 3), format_time(info.duration))
+            else:
+                track_list.clear()
+                for info in self.playlist.tracks:
+                    track_list.add_row(info.title, info.artist, info.album, format_time(info.duration))
         except Exception as e:
             import logging
             logging.getLogger('tuneterm').error("Failed to refresh tracklist: %s", e)
@@ -786,10 +792,12 @@ class TuneTermApp(App):
         while getattr(self, 'is_running', True) and not getattr(self, '_exit', False):
             # We must be careful not to hold the lock for the whole loop
             unresolved_track = None
+            unresolved_idx = None
             with self.playlist._lock:
-                for t in self.playlist.tracks:
+                for idx, t in enumerate(self.playlist.tracks):
                     if getattr(t, 'is_unresolved', False) and not getattr(t, 'is_resolving', False):
                         unresolved_track = t
+                        unresolved_idx = idx
                         t.is_resolving = True
                         break
                         
@@ -807,7 +815,7 @@ class TuneTermApp(App):
                 unresolved_track.is_unresolved = False
                 unresolved_track.is_resolving = False
                 
-                self.call_from_thread(self._refresh_track_list)
+                self.call_from_thread(self._refresh_track_list, unresolved_idx)
             except Exception as e:
                 _log.error("[Spotify] Background resolver failed for %s: %s", unresolved_track.title, e)
                 # Mark as resolved anyway so we don't infinitely retry it, but it's empty
