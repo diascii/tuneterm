@@ -445,7 +445,7 @@ class TuneTermApp(App):
             def on_spotify_choice(choice: str):
                 if choice == "cancel":
                     return
-                self.run_worker(self._process_spotify_import(tracks, choice), thread=True)
+                self._process_spotify_import(tracks, choice)
 
             if len(tracks) > 1:
                 from tuneterm.ui.spotify_import_modal import SpotifyImportModal
@@ -455,6 +455,7 @@ class TuneTermApp(App):
         else:
             self.add_track_from_source(url, play_immediately=True)
             
+    @work(thread=True)
     def _process_spotify_import(self, tracks, choice):
         if choice == "replace":
             with self.playlist._lock:
