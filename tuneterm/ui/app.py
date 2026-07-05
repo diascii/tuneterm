@@ -364,11 +364,12 @@ class TuneTermApp(App):
         try:
             track_list = self.query_one(TrackList)
             track_list.clear()
-            from tuneterm.ui.utils import format_time
+            from tuneterm.ui.controls import format_time
             for info in self.playlist.tracks:
                 track_list.add_row(info.title, info.artist, info.album, format_time(info.duration))
-        except Exception:
-            pass
+        except Exception as e:
+            import logging
+            logging.getLogger('tuneterm').error("Failed to refresh tracklist: %s", e)
 
     def action_seek_forward(self):
         self.engine.seek_relative(10)
