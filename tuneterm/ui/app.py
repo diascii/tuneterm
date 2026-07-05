@@ -55,6 +55,8 @@ class TuneTermApp(App):
         ("=", "volume_up", "Vol+"),
         ("-", "volume_down", "Vol-"),
         ("?", "help", "Help"),
+        ("P", "playlists", "Playlists"),
+        ("S", "save_playlist", "Save Playlist"),
     ]
 
     def __init__(self, music_dir=None, play_on_start=None):
@@ -563,22 +565,28 @@ class TuneTermApp(App):
         self.playlist.remove(event.index)
         
         # We must completely redraw the track list to prevent index shifting bugs
-        track_list = self.query_one(TrackList)
-        track_list.clear()
-        for info in self.playlist.tracks:
-            track_list.add_row(info.title, info.artist, info.album, format_time(info.duration))
+        try:
+            track_list = self.query_one(TrackList)
+            track_list.clear()
+            for info in self.playlist.tracks:
+                track_list.add_row(info.title, info.artist, info.album, format_time(info.duration))
+        except Exception:
+            pass
 
     def on_track_list_track_moved_message(self, event: TrackList.TrackMovedMessage) -> None:
         """Handle move track up/down from TrackList."""
         success = self.playlist.move_track(event.from_index, event.to_index)
         if success:
-            # Redraw track list
-            track_list = self.query_one(TrackList)
-            track_list.clear()
-            for info in self.playlist.tracks:
-                track_list.add_row(info.title, info.artist, info.album, format_time(info.duration))
-            # Move cursor to new position
-            track_list.move_cursor(row=event.to_index)
+            try:
+                # Redraw track list
+                track_list = self.query_one(TrackList)
+                track_list.clear()
+                for info in self.playlist.tracks:
+                    track_list.add_row(info.title, info.artist, info.album, format_time(info.duration))
+                # Move cursor to new position
+                track_list.move_cursor(row=event.to_index)
+            except Exception:
+                pass
 
     def action_search(self):
         from tuneterm.ui.search_modal import SearchModal
@@ -621,6 +629,46 @@ class TuneTermApp(App):
 
     def query_library(self, query: str):
         return self.library.search(query)
+
+    def action_playlists(self):
+        from tuneterm.ui.playlists_modal import PlaylistsModal
+        self.push_screen(PlaylistsModal())
+
+    def action_save_playlist(self):
+        from tuneterm.ui.save_playlist_modal import SavePlaylistModal
+        self.push_screen(SavePlaylistModal())
+
+    def save_current_queue(self, name: str):
+        from tuneterm.player.playlists import save_playlist
+        tracks = [t.original_url if t.original_url else t.filepath for t in self.playlist.tracks]
+        save_playlist(name, tracks)
+        self.notify(f"Saved playlist: [bold]{name}[/bold] ({len(tracks)} tracks)", timeout=3)
+
+    def load_playlist_tracks(self, tracks: list[str]):
+        if not tracks:
+            self.notify("Playlist is empty or invalid.", severity="warning")
+            return
+            
+        self.crossfader.cancel()
+        self.engine.stop()
+        self.playlist.clear()
+        
+        track_list = self.query_one(TrackList)
+        track_list.clear()
+        
+        # Load and append
+        for fp in tracks:
+            import os
+            is_url = fp.startswith(("http://", "https://", "rtsp://"))
+            if not is_url and not os.path.isfile(fp):
+                _log.debug("[Playlists] Skip missing file: %s", fp)
+                continue
+            info = self.playlist.add(fp)
+            track_list.add_row(info.title, info.artist, info.album, format_time(info.duration))
+            
+        self.notify(f"Loaded playlist with [bold]{len(self.playlist.tracks)} tracks[/bold].", timeout=3)
+        if len(self.playlist.tracks) > 0:
+            self.play_track(0)
 
     def scrobble_current_track(self):
         import time
