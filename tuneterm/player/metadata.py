@@ -20,6 +20,7 @@ class TrackInfo:
     format: str
     cover_art_bytes: Optional[bytes] = None
     thumb_url: Optional[str] = None
+    original_url: Optional[str] = None
 
 def extract_metadata(filepath: str) -> TrackInfo:
     filename = os.path.basename(filepath)

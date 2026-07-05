@@ -104,10 +104,12 @@ class Playlist:
                     sample_rate=0,
                     format="Stream",
                     cover_art_bytes=cover_bytes,
-                    thumb_url=thumb_url
+                    thumb_url=thumb_url,
+                    original_url=filepath
                 )
             else:
                 info = extract_metadata(filepath)
+                info.original_url = filepath
                 
             self._tracks.append(info)
             if self._is_shuffled:

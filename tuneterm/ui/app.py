@@ -135,10 +135,14 @@ class TuneTermApp(App):
 
     def _save_session(self):
         try:
-            queue = [t.filepath for t in self.playlist.tracks]
+            queue = [t.original_url if t.original_url else t.filepath for t in self.playlist.tracks]
             pos   = self.engine.get_position()
             idx   = self.playlist.current_index
-            current = self.playlist.tracks[idx].filepath if 0 <= idx < len(queue) else ""
+            if 0 <= idx < len(self.playlist.tracks):
+                current_track = self.playlist.tracks[idx]
+                current = current_track.original_url if current_track.original_url else current_track.filepath
+            else:
+                current = ""
             save_session(current, pos, queue, music_dir=self.music_dir)
             _log.info("[Session] Saved %d tracks, pos=%.1fs", len(queue), pos)
         except Exception as e:
@@ -171,7 +175,7 @@ class TuneTermApp(App):
             # Restore current track index
             saved_path = sess.get("current_track", "")
             idx = next(
-                (i for i, t in enumerate(self.playlist.tracks) if t.filepath == saved_path),
+                (i for i, t in enumerate(self.playlist.tracks) if (t.original_url if t.original_url else t.filepath) == saved_path),
                 0
             )
             if self.playlist.tracks:
