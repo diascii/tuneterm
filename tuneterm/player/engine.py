@@ -17,14 +17,23 @@ class VLCAudioEngine:
         
         # State tracking
         self._current_media = None
-        self._volume = 100
+        self._user_volume = 100
+        self.end_reached = False
+        
+        # Attach events
+        self.player.event_manager().event_attach(vlc.EventType.MediaPlayerEndReached, self._on_event)
+        self.player.event_manager().event_attach(vlc.EventType.MediaPlayerEncounteredError, self._on_event)
         
         # Instantiate Equalizer
         from tuneterm.player.equalizer import Equalizer
         self.equalizer = Equalizer(self)
 
+    def _on_event(self, event):
+        self.end_reached = True
+
     def play(self, filepath: str):
         with self.lock:
+            self.end_reached = False
             # Langsung play — VLC handles internal state
             self._current_media = self.instance.media_new(filepath)
             self.player.set_media(self._current_media)
@@ -69,43 +78,43 @@ class VLCAudioEngine:
                 target_ms = min(target_ms, duration_ms)
             self.player.set_time(target_ms)
 
-    def fade_volume(self, from_v: int, to_v: int, duration: float, steps: int = 10):
+    def fade_volume(self, from_v: int, to_v: int, duration: float, steps: int = 10, abort_event=None):
         """Fade volume from `from_v` to `to_v` over `duration` seconds in `steps` steps.
         Harus dipanggil dari background thread (VLC audio_set_volume bisa block)."""
         import time
         for i in range(steps + 1):
+            if abort_event and abort_event.is_set():
+                return
             progress = i / steps
             vol = int(from_v + (to_v - from_v) * progress)
             vol = max(0, min(100, vol))
             with self.lock:
                 self.player.audio_set_volume(vol)
-                self._volume = vol
             time.sleep(duration / (steps + 1))
         # Ensure final volume is set
-        with self.lock:
-            self.player.audio_set_volume(to_v)
-            self._volume = to_v
+        if not abort_event or not abort_event.is_set():
+            with self.lock:
+                self.player.audio_set_volume(to_v)
 
     @property
     def volume(self) -> int:
-        return self._volume
+        return self._user_volume
 
     @volume.setter
     def volume(self, val: int):
         with self.lock:
             val = max(0, min(100, val))
             self.player.audio_set_volume(val)
-            self._volume = val
+            self._user_volume = val
 
     def set_volume(self, volume: int):
         with self.lock:
-            # VLC volume is 0-100 (can go up to 200/400 but we keep 100 max)
             val = max(0, min(100, volume))
             self.player.audio_set_volume(val)
-            self._volume = val
+            self._user_volume = val
 
     def get_volume(self) -> int:
-        return self._volume
+        return self._user_volume
 
     def get_position(self) -> float:
         # returns position in seconds, or -1 if no media

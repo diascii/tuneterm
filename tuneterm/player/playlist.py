@@ -163,6 +163,19 @@ class Playlist:
             elif to_index <= self._current_index < from_index:
                 self._current_index += 1
 
+            # Update history indices
+            new_history = []
+            for h in self.history:
+                if h == from_index:
+                    new_history.append(to_index)
+                elif from_index < h <= to_index:
+                    new_history.append(h - 1)
+                elif to_index <= h < from_index:
+                    new_history.append(h + 1)
+                else:
+                    new_history.append(h)
+            self.history = new_history
+
             # Rebuild shuffle if active
             if self._is_shuffled:
                 self._rebuild_shuffle()

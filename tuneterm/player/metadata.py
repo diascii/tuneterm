@@ -104,7 +104,8 @@ def fetch_itunes_artwork(artist: str, title: str) -> Optional[str]:
         query = urllib.parse.quote(f"{artist} {title}")
         url = f"https://itunes.apple.com/search?term={query}&entity=song&limit=1"
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        resp = urllib.request.urlopen(req, timeout=3).read()
+        with urllib.request.urlopen(req, timeout=3) as response:
+            resp = response.read()
         data = json.loads(resp)
         if data['results']:
             # Get 512x512 image instead of 100x100

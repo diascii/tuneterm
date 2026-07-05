@@ -21,15 +21,16 @@ class DiscordRPC:
             _log.warning("[DiscordRPC] Gagal connect: %s", e)
             self.connected = False
             
-    def update(self, details: str, state: str, large_image: str = None):
+    def update(self, details: str, state: str, large_image: str = None, start_time: int = None):
         if self.connected and self.rpc:
             try:
                 kwargs = {
                     "details": details,
                     "state": state,
                     "large_text": "TuneTerm",
-                    "start": time.time()
                 }
+                if start_time:
+                    kwargs["start"] = start_time
                 if large_image:
                     kwargs["large_image"] = large_image
                     

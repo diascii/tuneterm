@@ -232,7 +232,9 @@ class TuneTermApp(App):
             large_image = "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f6/Music_1_-_The_Noun_Project.svg/512px-Music_1_-_The_Noun_Project.svg.png"
             
         try:
-            self.rpc.update(details, state, large_image=large_image)
+            import time
+            start_time = int(time.time() - self.engine.get_position()) if track and self.engine.is_playing() else None
+            self.rpc.update(details, state, large_image=large_image, start_time=start_time)
         except Exception as e:
             _log.warning("[DiscordRPC] Gagal update presence: %s", e)
 
@@ -373,29 +375,22 @@ class TuneTermApp(App):
         self.push_screen(FirstRunScreen())
 
     def _check_track_end(self):
-        """Poll-based track end detection — aman karena di main thread."""
+        """Poll-based track end detection based on VLC event flag."""
         try:
-            is_playing = self.engine.is_playing()
-            was_playing = self._was_playing
-            self._was_playing = is_playing
+            self._was_playing = self.engine.is_playing()
             
-            # Detect transition: was playing → now stopped
-            if was_playing and not is_playing:
+            if self.engine.end_reached:
+                self.engine.end_reached = False
+                _log.info("[App] Track end reached natively, proceeding to next")
+                
                 track = self.playlist.current()
                 if track is not None:
-                    # Check position — near end? skip if user manually paused
-                    pos = self.engine.get_position()
-                    dur = self.engine.get_duration()
-                    _log.debug("[App] Track end detected: pos=%s, dur=%s", pos, dur)
-                    
-                    if dur > 0 and pos >= dur * 0.8:  # 80%+ means track ended naturally
-                        _log.info("[App] Track end detected, crossfading to next")
-                        self.scrobble_current_track()
-                        track = self.playlist.next()
-                        if track:
-                            self.crossfader.crossfade_out(on_done=lambda: self._play_next_with_fadein(track))
-                        else:
-                            self.reset_now_playing()
+                    self.scrobble_current_track()
+                    next_track = self.playlist.next()
+                    if next_track:
+                        self._play_next_with_fadein(next_track)
+                    else:
+                        self.reset_now_playing()
         except Exception as e:
             _log.error("[App] _check_track_end error: %s", e)
 
