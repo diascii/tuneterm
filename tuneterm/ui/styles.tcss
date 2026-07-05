@@ -34,7 +34,7 @@
 }
 
 #now-playing-row {
-    height: 14;
+    height: 17;
     border-bottom: solid $primary;
 }
 
@@ -87,7 +87,7 @@
 }
 
 #spinning-art {
-    width: 26;
+    width: 33;
 }
 
 #track-info {

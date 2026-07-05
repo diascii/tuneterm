@@ -20,7 +20,7 @@ class SpinningArt(Static):
     def set_art(self, image_bytes: bytes):
         def worker():
             try:
-                new_frames = generate_vinyl_frames(image_bytes, width=20, height=10)
+                new_frames = generate_vinyl_frames(image_bytes, width=26, height=13)
                 try:
                     self.app.call_from_thread(self.update_frames, new_frames)
                 except Exception as e:
@@ -30,7 +30,7 @@ class SpinningArt(Static):
                 
                 # fallback blank frames
                 try:
-                    new_frames = generate_vinyl_frames(None, width=20, height=10)
+                    new_frames = generate_vinyl_frames(None, width=26, height=13)
                     try:
                         self.app.call_from_thread(self.update_frames, new_frames)
                     except Exception as e:
