@@ -117,6 +117,29 @@ class Playlist:
                 self._shuffled_indices.append(len(self._tracks) - 1)
             return info
 
+    def add_lazy_spotify(self, title: str, artist: str, cover_url: Optional[str] = None) -> TrackInfo:
+        with self._lock:
+            info = TrackInfo(
+                filepath="",
+                title=title,
+                artist=artist,
+                album="Spotify",
+                year="",
+                genre="Spotify",
+                duration=0.0,
+                bitrate=0,
+                sample_rate=0,
+                format="youtube",
+                thumb_url=cover_url,
+                original_url=None,
+                is_unresolved=True,
+                search_query=f"ytsearch1:{artist} {title}"
+            )
+            self._tracks.append(info)
+            if self._is_shuffled:
+                self._shuffled_indices.append(len(self._tracks) - 1)
+            return info
+
     def add_track_info(self, info: TrackInfo) -> TrackInfo:
         with self._lock:
             self._tracks.append(info)

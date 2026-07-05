@@ -107,6 +107,8 @@ class TuneTermApp(App):
         self.set_interval(30.0, self._watchdog_check)     # Watchdog — heartbeat log tiap 30 detik
         self.set_interval(0.5, self._tick_marquee)        # Marquee — sliding title tiap 0.5 detik
         
+        self.run_worker(self._spotify_background_resolver, thread=True)
+
         # Restore saved volume
         try:
             self.engine.set_volume(config.volume)
@@ -296,39 +298,77 @@ class TuneTermApp(App):
         self.scrobble_current_track()
         track = self.playlist.next()
         if track:
-            self.engine.mute(True)
-            self.engine.play(track.filepath)
-            self.crossfader.crossfade_in()
-            self.update_now_playing()
-            self.bg_update_now_playing(track.artist, track.title)
+            self.resolve_and_play(track)
         else:
             self.reset_now_playing()
 
     def _play_next_with_fadein(self, track):
         """Play track and fade in (called after fade-out completes)."""
+        self.resolve_and_play(track)
+
+    def resolve_and_play(self, track):
+        """Resolves Spotify track if needed, then plays it on the main thread."""
+        if getattr(track, 'is_unresolved', False):
+            self.run_worker(self._resolve_and_play_bg(track), thread=True)
+        else:
+            self._do_fadein_play(track)
+
+    async def _resolve_and_play_bg(self, track):
+        self.call_from_thread(self.notify, f"Resolving {track.title}...", timeout=2)
+        from tuneterm.player.streaming import get_youtube_stream_info
+        try:
+            info = get_youtube_stream_info(track.search_query)
+            track.filepath = info['url']
+            track.original_url = track.filepath
+            track.duration = info.get('duration', 0)
+            if not track.thumb_url and info.get('thumbnail'):
+                track.thumb_url = info.get('thumbnail')
+            track.is_unresolved = False
+            
+            # Update tracklist duration
+            self.call_from_thread(self._refresh_track_list)
+        except Exception as e:
+            self.call_from_thread(self.notify, f"Failed to resolve {track.title}", severity="error")
+            return
+            
         self.call_from_thread(self._do_fadein_play, track)
 
     def _do_fadein_play(self, track):
         """Actually play and fade in (called on main thread)."""
         self.crossfader.cancel()
+        self.engine.stop()
         self.engine.mute(True)
         self.engine.play(track.filepath)
         self.crossfader.crossfade_in()
         self.update_now_playing()
         self.bg_update_now_playing(track.artist, track.title)
+        self._save_session()
 
     def action_prev_track(self):
         self.scrobble_current_track()
-        track = self.playlist.previous()
+        track = self.playlist.prev()
         if track:
-            self.crossfader.cancel()
-            self.engine.mute(True)
-            self.engine.play(track.filepath)
-            self.crossfader.crossfade_in()
-            self.update_now_playing()
-            self.bg_update_now_playing(track.artist, track.title)
+            self.resolve_and_play(track)
         else:
             self.reset_now_playing()
+
+    def play_track(self, index: int):
+        if 0 <= index < len(self.playlist.tracks):
+            self.scrobble_current_track()
+            self.playlist.current_index = index
+            track = self.playlist.tracks[index]
+            self.resolve_and_play(track)
+
+    def _refresh_track_list(self):
+        """Helper to redraw TrackList."""
+        try:
+            track_list = self.query_one(TrackList)
+            track_list.clear()
+            from tuneterm.ui.utils import format_time
+            for info in self.playlist.tracks:
+                track_list.add_row(info.title, info.artist, info.album, format_time(info.duration))
+        except Exception:
+            pass
 
     def action_seek_forward(self):
         self.engine.seek_relative(10)
@@ -381,7 +421,48 @@ class TuneTermApp(App):
 
     @work(thread=True)
     def add_url_and_play(self, url: str):
-        self.add_track_from_source(url, play_immediately=True)
+        if "spotify.com" in url:
+            self.call_from_thread(self.notify, "Fetching Spotify metadata...", timeout=2)
+            from tuneterm.integrations.spotify import get_spotify_metadata
+            tracks = get_spotify_metadata(url)
+            if not tracks:
+                self.call_from_thread(self.notify, "Failed to load Spotify link.", severity="error")
+                return
+                
+            def on_spotify_choice(choice: str):
+                if choice == "cancel":
+                    return
+                self.run_worker(self._process_spotify_import(tracks, choice), thread=True)
+
+            if len(tracks) > 1:
+                from tuneterm.ui.spotify_import_modal import SpotifyImportModal
+                self.call_from_thread(lambda: self.push_screen(SpotifyImportModal(len(tracks)), on_spotify_choice))
+            else:
+                on_spotify_choice("append")
+        else:
+            self.add_track_from_source(url, play_immediately=True)
+            
+    async def _process_spotify_import(self, tracks, choice):
+        if choice == "replace":
+            with self.playlist._lock:
+                self.playlist.clear()
+            self.call_from_thread(lambda: self.query_one(TrackList).clear())
+            self.engine.stop()
+            self.reset_now_playing()
+            
+        added_idx = None
+        
+        # We need a way to add spotify tracks as lazy TrackInfo
+        for idx, t in enumerate(tracks):
+            info = self.playlist.add_lazy_spotify(t['title'], t['artist'], t['cover_url'])
+            if idx == 0 and choice == "replace":
+                with self.playlist._lock:
+                    added_idx = self.playlist._tracks.index(info)
+            self.call_from_thread(self._on_track_added, info, False)
+            
+        self.call_from_thread(self.notify, f"Imported {len(tracks)} tracks from Spotify!")
+        if added_idx is not None:
+            self.call_from_thread(self.play_track, added_idx)
 
     def action_change_dir(self):
         from tuneterm.ui.first_run import FirstRunScreen
@@ -429,20 +510,6 @@ class TuneTermApp(App):
         self._check_track_end()
         self.update_playback_status()
         
-    def play_track(self, index: int):
-        if 0 <= index < len(self.playlist.tracks):
-            self.scrobble_current_track()
-            self.playlist.current_index = index
-            track = self.playlist.tracks[index]
-            self.crossfader.cancel()
-            self.engine.stop()  # Cleanup VLC state before playing new track
-            self.engine.mute(True)
-            self.engine.play(track.filepath)
-            self.crossfader.crossfade_in()
-            self.update_now_playing()
-            self.bg_update_now_playing(track.artist, track.title)
-            self._save_session()
-
     def update_now_playing(self):
         track = self.playlist.current()
         if track:
@@ -685,4 +752,42 @@ class TuneTermApp(App):
     def bg_scrobble(self, artist: str, title: str, timestamp: int):
         if hasattr(self, 'scrobbler') and self.scrobbler:
             self.scrobbler.scrobble(artist, title, timestamp)
+
+    @work(thread=True)
+    def _spotify_background_resolver(self):
+        """Continuously search the queue for unresolved Spotify tracks and resolve them."""
+        import time
+        from tuneterm.player.streaming import get_youtube_stream_info
+        
+        while getattr(self, 'is_running', True):
+            # We must be careful not to hold the lock for the whole loop
+            unresolved_track = None
+            with self.playlist._lock:
+                for t in self.playlist.tracks:
+                    if getattr(t, 'is_unresolved', False):
+                        unresolved_track = t
+                        break
+                        
+            if not unresolved_track:
+                time.sleep(2.0)
+                continue
+                
+            try:
+                info = get_youtube_stream_info(unresolved_track.search_query)
+                unresolved_track.filepath = info['url']
+                unresolved_track.original_url = unresolved_track.filepath
+                unresolved_track.duration = info.get('duration', 0)
+                if not unresolved_track.thumb_url and info.get('thumbnail'):
+                    unresolved_track.thumb_url = info.get('thumbnail')
+                unresolved_track.is_unresolved = False
+                
+                self.call_from_thread(self._refresh_track_list)
+            except Exception as e:
+                _log.error("[Spotify] Background resolver failed for %s: %s", unresolved_track.title, e)
+                # Mark as resolved anyway so we don't infinitely retry it, but it's empty
+                unresolved_track.is_unresolved = False
+                unresolved_track.filepath = ""
+                
+            time.sleep(1.0) # sleep between requests to avoid rate limits
+
 
