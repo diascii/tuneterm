@@ -41,12 +41,12 @@ class VLCAudioEngine:
 
     def pause(self):
         with self.lock:
-            self.player.pause()
+            self.player.set_pause(1)
 
     def resume(self):
         with self.lock:
             if not self.is_playing():
-                self.player.play()
+                self.player.set_pause(0)
 
     def stop(self):
         with self.lock:
@@ -55,9 +55,9 @@ class VLCAudioEngine:
     def toggle_pause(self):
         with self.lock:
             if self.is_playing():
-                self.pause()
+                self.player.set_pause(1)
             else:
-                self.resume()
+                self.player.set_pause(0)
 
     def seek_relative(self, seconds: float):
         current = self.get_position()

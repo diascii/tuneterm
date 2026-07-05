@@ -69,6 +69,9 @@ class MockInstance:
         def pause():
             player._playing = not player._playing
         player.pause = pause
+        def set_pause(state):
+            player._playing = False if state else True
+        player.set_pause = set_pause
         def stop():
             player._playing = False
             player._time = 0
